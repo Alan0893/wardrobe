@@ -175,8 +175,8 @@ function isStandaloneTop(item: FitItem): boolean {
 
 // --- Generator ---
 
-export async function generateFit(season?: string): Promise<FitItem[]> {
-  const items = await prisma.item.findMany();
+export async function generateFit(userId: string, season?: string): Promise<FitItem[]> {
+  const items = await prisma.item.findMany({ where: { userId } });
   if (items.length === 0) return [];
 
   const byCategory: Record<string, typeof items> = {};

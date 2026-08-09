@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { DM_Sans, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { Nav } from "@/components/Nav";
+import { Providers } from "@/components/Providers";
 
 const dmSans = DM_Sans({
   variable: "--font-geist-sans",
@@ -28,10 +29,12 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${dmSans.variable} ${playfair.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
-        <Nav />
-        <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 py-8">
-          {children}
-        </main>
+        <Providers>
+          <Nav />
+          <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 py-8">
+            {children}
+          </main>
+        </Providers>
       </body>
     </html>
   );

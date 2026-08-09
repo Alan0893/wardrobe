@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 
 export async function GET(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { searchParams } = new URL(req.url);
   const category = searchParams.get("category");
   const color = searchParams.get("color");
 
-  const where: Record<string, unknown> = {};
+  const where: Record<string, unknown> = { userId: session.user.id };
   if (category) where.category = category;
   if (color) where.color = { contains: color };
 
@@ -19,6 +25,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = await req.json();
 
   const item = await prisma.item.create({
@@ -31,6 +42,7 @@ export async function POST(req: NextRequest) {
       category: body.category || "TOP",
       color: body.color || null,
       season: body.season || "ALL_SEASON",
+      userId: session.user.id,
     },
   });
 
