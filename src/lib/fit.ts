@@ -5,8 +5,32 @@ interface FitItem {
   name: string;
   brand: string | null;
   imageUrl: string | null;
+  colorImageUrl: string | null;
   category: string;
   season: string;
+}
+
+// Outerwear items that function as mid-layers (worn over a shirt, under a coat)
+const MID_LAYER_KEYWORDS = [
+  "sweater", "cardigan", "pullover", "hoodie", "crewneck", "sweatshirt",
+  "fleece", "knit", "turtleneck", "vest",
+];
+
+// Outerwear items that are true outer layers
+const OUTER_LAYER_KEYWORDS = [
+  "jacket", "coat", "parka", "blazer", "bomber", "windbreaker",
+  "trench", "overcoat", "puffer", "anorak", "raincoat", "denim jacket",
+  "shacket", "overshirt",
+];
+
+function isMidLayer(name: string): boolean {
+  const lower = name.toLowerCase();
+  return MID_LAYER_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+function isOuterLayer(name: string): boolean {
+  const lower = name.toLowerCase();
+  return OUTER_LAYER_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
 export async function generateFit(season?: string): Promise<FitItem[]> {
@@ -33,24 +57,65 @@ export async function generateFit(season?: string): Promise<FitItem[]> {
   }
 
   const fit: FitItem[] = [];
+  const usedIds = new Set<string>();
 
-  const top = pickRandom(filterBySeason(byCategory["TOP"] || []));
-  if (top) fit.push(top);
-
-  const bottom = pickRandom(filterBySeason(byCategory["BOTTOM"] || []));
-  if (bottom) fit.push(bottom);
-
-  const shoes = pickRandom(filterBySeason(byCategory["SHOES"] || []));
-  if (shoes) fit.push(shoes);
-
-  if (byCategory["OUTERWEAR"]?.length && Math.random() > 0.5) {
-    const outerwear = pickRandom(filterBySeason(byCategory["OUTERWEAR"]!));
-    if (outerwear) fit.push(outerwear);
+  // 1. Base layer: always pick a top (shirt, tee, etc.)
+  const tops = filterBySeason(byCategory["TOP"] || []);
+  const top = pickRandom(tops);
+  if (top) {
+    fit.push(top);
+    usedIds.add(top.id);
   }
 
-  if (byCategory["ACCESSORY"]?.length && Math.random() > 0.5) {
-    const accessory = pickRandom(filterBySeason(byCategory["ACCESSORY"]!));
-    if (accessory) fit.push(accessory);
+  // 2. Mid-layer: optionally add a sweater/cardigan/hoodie over the shirt
+  const outerwearPool = filterBySeason(byCategory["OUTERWEAR"] || []);
+  const midLayers = outerwearPool.filter((i) => isMidLayer(i.name));
+  const outerLayers = outerwearPool.filter((i) => isOuterLayer(i.name));
+  // Items that don't clearly match either get put in both pools
+  const ambiguous = outerwearPool.filter((i) => !isMidLayer(i.name) && !isOuterLayer(i.name));
+
+  const midPool = [...midLayers, ...ambiguous];
+  const outerPool = [...outerLayers, ...ambiguous];
+
+  if (midPool.length > 0 && Math.random() > 0.4) {
+    const mid = pickRandom(midPool);
+    if (mid) {
+      fit.push(mid);
+      usedIds.add(mid.id);
+    }
+  }
+
+  // 3. Outer layer: optionally add a jacket/coat on top of everything
+  const availableOuter = outerPool.filter((i) => !usedIds.has(i.id));
+  if (availableOuter.length > 0 && Math.random() > 0.5) {
+    const outer = pickRandom(availableOuter);
+    if (outer) {
+      fit.push(outer);
+      usedIds.add(outer.id);
+    }
+  }
+
+  // 4. Bottom: always pick pants/jeans/shorts/skirt
+  const bottoms = filterBySeason(byCategory["BOTTOM"] || []);
+  const bottom = pickRandom(bottoms);
+  if (bottom) {
+    fit.push(bottom);
+    usedIds.add(bottom.id);
+  }
+
+  // 5. Shoes: always pick footwear
+  const shoes = filterBySeason(byCategory["SHOES"] || []);
+  const shoe = pickRandom(shoes);
+  if (shoe) {
+    fit.push(shoe);
+    usedIds.add(shoe.id);
+  }
+
+  // 6. Accessory: optionally add one
+  const accessories = filterBySeason(byCategory["ACCESSORY"] || []);
+  if (accessories.length > 0 && Math.random() > 0.5) {
+    const acc = pickRandom(accessories);
+    if (acc) fit.push(acc);
   }
 
   return fit;
