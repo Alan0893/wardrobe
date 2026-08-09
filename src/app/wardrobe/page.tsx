@@ -6,11 +6,33 @@ import { ItemForm } from "@/components/ItemForm";
 
 const CATEGORIES = ["ALL", "TOP", "BOTTOM", "SHOES", "OUTERWEAR", "ACCESSORY"];
 
+interface ItemGroup {
+  key: string;
+  items: ItemData[];
+}
+
+function groupItems(items: ItemData[]): ItemGroup[] {
+  const map = new Map<string, ItemData[]>();
+  for (const item of items) {
+    // Normalize: strip common suffixes retailers add (e.g. "| UNIQLO US")
+    const normalized = item.name
+      .replace(/\s*\|.*$/, "")
+      .replace(/\s*[-–].*(?:official|store|shop).*$/i, "")
+      .trim()
+      .toLowerCase();
+    const key = `${normalized}::${item.category}`;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(item);
+  }
+  return Array.from(map.entries()).map(([key, items]) => ({ key, items }));
+}
+
 export default function WardrobePage() {
   const [items, setItems] = useState<ItemData[]>([]);
   const [category, setCategory] = useState("ALL");
   const [colorFilter, setColorFilter] = useState("");
   const [editingItem, setEditingItem] = useState<ItemData | null>(null);
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
 
   const loadItems = useCallback(async () => {
     const params = new URLSearchParams();
@@ -39,6 +61,8 @@ export default function WardrobePage() {
     setEditingItem(null);
     loadItems();
   }
+
+  const groups = groupItems(items);
 
   return (
     <div className="space-y-6">
@@ -103,14 +127,58 @@ export default function WardrobePage() {
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-          {items.map((item) => (
-            <ItemCard
-              key={item.id}
-              item={item}
-              onDelete={handleDelete}
-              onEdit={handleEdit}
-            />
-          ))}
+          {groups.map((group) => {
+            const isExpanded = expandedGroup === group.key;
+
+            if (group.items.length === 1) {
+              return (
+                <ItemCard
+                  key={group.items[0].id}
+                  item={group.items[0]}
+                  onDelete={handleDelete}
+                  onEdit={handleEdit}
+                />
+              );
+            }
+
+            if (isExpanded) {
+              return group.items.map((item) => (
+                <ItemCard
+                  key={item.id}
+                  item={item}
+                  onDelete={handleDelete}
+                  onEdit={handleEdit}
+                  badge={
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedGroup(null);
+                      }}
+                      className="absolute top-2 left-2 z-10 bg-stone-800 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md shadow-sm hover:bg-stone-700"
+                    >
+                      Collapse
+                    </button>
+                  }
+                />
+              ));
+            }
+
+            return (
+              <div key={group.key} className="relative">
+                <button
+                  onClick={() => setExpandedGroup(group.key)}
+                  className="absolute top-2 left-2 z-10 bg-stone-800 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shadow-sm hover:bg-stone-700 transition-colors"
+                >
+                  {group.items.length}
+                </button>
+                <ItemCard
+                  item={group.items[0]}
+                  onDelete={handleDelete}
+                  onEdit={handleEdit}
+                />
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

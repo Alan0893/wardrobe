@@ -20,6 +20,7 @@ interface ItemCardProps {
   item: ItemData;
   onDelete?: (id: string) => void;
   onEdit?: (item: ItemData) => void;
+  badge?: React.ReactNode;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -58,11 +59,12 @@ function ColorDot({ item }: { item: ItemData }) {
   return null;
 }
 
-export function ItemCard({ item, onDelete, onEdit }: ItemCardProps) {
+export function ItemCard({ item, onDelete, onEdit, badge }: ItemCardProps) {
   const [imgError, setImgError] = useState(false);
 
   return (
-    <div className="group bg-white rounded-lg border border-stone-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+    <div className="group bg-white rounded-lg border border-stone-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow relative">
+      {badge}
       <div className="aspect-square bg-stone-100 relative overflow-hidden">
         {item.imageUrl && !imgError ? (
           <img
