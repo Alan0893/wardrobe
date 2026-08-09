@@ -3,7 +3,6 @@ import * as cheerio from "cheerio";
 export interface ScrapedProduct {
   name: string;
   brand: string;
-  price: string;
   imageUrl: string;
   colorImageUrl: string;
   category: string;
@@ -404,7 +403,7 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
   });
 
   if (!res.ok) {
-    return { name: "", brand: "", price: "", imageUrl: "", colorImageUrl: "", category: "TOP", color: "", season: "ALL_SEASON" };
+    return { name: "", brand: "", imageUrl: "", colorImageUrl: "", category: "TOP", color: "", season: "ALL_SEASON" };
   }
 
   const html = await res.text();
@@ -446,13 +445,6 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
     $('meta[name="author"]').attr("content") ||
     "";
 
-  const price =
-    $('meta[property="product:price:amount"]').attr("content") ||
-    $('meta[property="og:price:amount"]').attr("content") ||
-    $('[itemprop="price"]').attr("content") ||
-    $('[data-testid*="price"]').first().text().trim() ||
-    "";
-
   const category = detectCategory($, name, url);
   const color = detectColor($, name, url);
 
@@ -463,5 +455,5 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
     "";
   const season = detectSeason(`${name} ${descriptionText}`, category);
 
-  return { name, brand, price, imageUrl, colorImageUrl, category, color, season };
+  return { name, brand, imageUrl, colorImageUrl, category, color, season };
 }

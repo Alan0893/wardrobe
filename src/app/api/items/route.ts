@@ -25,7 +25,6 @@ export async function POST(req: NextRequest) {
     data: {
       name: body.name,
       brand: body.brand || null,
-      price: body.price || null,
       imageUrl: body.imageUrl || null,
       colorImageUrl: body.colorImageUrl || null,
       productUrl: body.productUrl,

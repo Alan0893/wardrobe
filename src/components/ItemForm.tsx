@@ -10,7 +10,6 @@ interface ItemFormProps {
   initial: {
     name: string;
     brand: string;
-    price: string;
     imageUrl: string;
     colorImageUrl?: string;
     productUrl: string;
@@ -27,7 +26,6 @@ export function ItemForm({ initial, itemId, onSaved, onCancel }: ItemFormProps) 
   const [form, setForm] = useState({
     name: initial.name || "",
     brand: initial.brand || "",
-    price: initial.price || "",
     imageUrl: initial.imageUrl || "",
     colorImageUrl: initial.colorImageUrl || "",
     productUrl: initial.productUrl || "",
@@ -63,7 +61,6 @@ export function ItemForm({ initial, itemId, onSaved, onCancel }: ItemFormProps) 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Name" value={form.name} onChange={(v) => update("name", v)} />
         <Field label="Brand" value={form.brand} onChange={(v) => update("brand", v)} />
-        <Field label="Price" value={form.price} onChange={(v) => update("price", v)} />
         <Field label="Color" value={form.color} onChange={(v) => update("color", v)} />
         <Field label="Image URL" value={form.imageUrl} onChange={(v) => update("imageUrl", v)} />
         <Field label="Color Swatch URL" value={form.colorImageUrl} onChange={(v) => update("colorImageUrl", v)} />

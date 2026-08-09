@@ -6,7 +6,6 @@ import { ItemForm } from "./ItemForm";
 interface ScrapedData {
   name: string;
   brand: string;
-  price: string;
   imageUrl: string;
   colorImageUrl: string;
   category: string;

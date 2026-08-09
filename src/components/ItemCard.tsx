@@ -7,7 +7,6 @@ export interface ItemData {
   id: string;
   name: string;
   brand: string | null;
-  price: string | null;
   imageUrl: string | null;
   colorImageUrl: string | null;
   productUrl: string;
@@ -117,11 +116,6 @@ export function ItemCard({ item, onDelete, onEdit }: ItemCardProps) {
             </span>
           )}
         </div>
-        {item.price && (
-          <div className="mt-1 text-sm font-medium text-stone-700">
-            {item.price.startsWith("$") ? item.price : `$${item.price}`}
-          </div>
-        )}
       </div>
     </div>
   );

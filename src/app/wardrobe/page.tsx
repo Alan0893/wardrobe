@@ -82,7 +82,6 @@ export default function WardrobePage() {
             initial={{
               name: editingItem.name,
               brand: editingItem.brand || "",
-              price: editingItem.price || "",
               imageUrl: editingItem.imageUrl || "",
               colorImageUrl: editingItem.colorImageUrl || "",
               productUrl: editingItem.productUrl,
