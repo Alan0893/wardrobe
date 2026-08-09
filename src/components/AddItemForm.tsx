@@ -8,7 +8,10 @@ interface ScrapedData {
   brand: string;
   price: string;
   imageUrl: string;
+  colorImageUrl: string;
   category: string;
+  color: string;
+  season: string;
 }
 
 export function AddItemForm({ onAdded }: { onAdded?: () => void }) {

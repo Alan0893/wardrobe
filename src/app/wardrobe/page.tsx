@@ -58,8 +58,8 @@ export default function WardrobePage() {
               key={cat}
               onClick={() => setCategory(cat)}
               className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${category === cat
-                  ? "bg-stone-800 text-white"
-                  : "bg-white text-stone-600 border border-stone-200 hover:border-stone-300"
+                ? "bg-stone-800 text-white"
+                : "bg-white text-stone-600 border border-stone-200 hover:border-stone-300"
                 }`}
             >
               {cat === "ALL" ? "All" : cat.charAt(0) + cat.slice(1).toLowerCase()}
@@ -84,6 +84,7 @@ export default function WardrobePage() {
               brand: editingItem.brand || "",
               price: editingItem.price || "",
               imageUrl: editingItem.imageUrl || "",
+              colorImageUrl: editingItem.colorImageUrl || "",
               productUrl: editingItem.productUrl,
               category: editingItem.category,
               color: editingItem.color,

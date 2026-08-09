@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { colorToHex } from "@/lib/colorHex";
 
 export interface ItemData {
   id: string;
@@ -8,6 +9,7 @@ export interface ItemData {
   brand: string | null;
   price: string | null;
   imageUrl: string | null;
+  colorImageUrl: string | null;
   productUrl: string;
   category: string;
   color: string | null;
@@ -28,6 +30,34 @@ const CATEGORY_LABELS: Record<string, string> = {
   OUTERWEAR: "Outerwear",
   ACCESSORY: "Accessory",
 };
+
+function ColorDot({ item }: { item: ItemData }) {
+  const [swatchError, setSwatchError] = useState(false);
+
+  if (item.colorImageUrl && !swatchError) {
+    return (
+      <img
+        src={item.colorImageUrl}
+        alt={item.color || "color"}
+        className="w-3.5 h-3.5 rounded-full border border-stone-200 object-cover"
+        onError={() => setSwatchError(true)}
+      />
+    );
+  }
+
+  const hex = colorToHex(item.color);
+  if (hex) {
+    const isGradient = hex.includes("gradient");
+    return (
+      <span
+        className="inline-block w-3.5 h-3.5 rounded-full border border-stone-200"
+        style={isGradient ? { background: hex } : { backgroundColor: hex }}
+      />
+    );
+  }
+
+  return null;
+}
 
 export function ItemCard({ item, onDelete, onEdit }: ItemCardProps) {
   const [imgError, setImgError] = useState(false);
@@ -80,6 +110,12 @@ export function ItemCard({ item, onDelete, onEdit }: ItemCardProps) {
           <span className="px-1.5 py-0.5 bg-stone-100 rounded text-stone-600">
             {CATEGORY_LABELS[item.category] || item.category}
           </span>
+          {(item.color || item.colorImageUrl) && (
+            <span className="flex items-center gap-1">
+              <ColorDot item={item} />
+              {item.color && <span>{item.color}</span>}
+            </span>
+          )}
         </div>
         {item.price && (
           <div className="mt-1 text-sm font-medium text-stone-700">

@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
       brand: body.brand || null,
       price: body.price || null,
       imageUrl: body.imageUrl || null,
+      colorImageUrl: body.colorImageUrl || null,
       productUrl: body.productUrl,
       category: body.category || "TOP",
       color: body.color || null,

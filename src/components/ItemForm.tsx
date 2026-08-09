@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { colorToHex } from "@/lib/colorHex";
 
 const CATEGORIES = ["TOP", "BOTTOM", "SHOES", "OUTERWEAR", "ACCESSORY"];
 const SEASONS = ["ALL_SEASON", "SUMMER", "WINTER"];
@@ -11,6 +12,7 @@ interface ItemFormProps {
     brand: string;
     price: string;
     imageUrl: string;
+    colorImageUrl?: string;
     productUrl: string;
     category: string;
     color?: string | null;
@@ -27,6 +29,7 @@ export function ItemForm({ initial, itemId, onSaved, onCancel }: ItemFormProps) 
     brand: initial.brand || "",
     price: initial.price || "",
     imageUrl: initial.imageUrl || "",
+    colorImageUrl: initial.colorImageUrl || "",
     productUrl: initial.productUrl || "",
     category: initial.category || "TOP",
     color: initial.color || "",
@@ -63,6 +66,7 @@ export function ItemForm({ initial, itemId, onSaved, onCancel }: ItemFormProps) 
         <Field label="Price" value={form.price} onChange={(v) => update("price", v)} />
         <Field label="Color" value={form.color} onChange={(v) => update("color", v)} />
         <Field label="Image URL" value={form.imageUrl} onChange={(v) => update("imageUrl", v)} />
+        <Field label="Color Swatch URL" value={form.colorImageUrl} onChange={(v) => update("colorImageUrl", v)} />
         <Field label="Product URL" value={form.productUrl} onChange={(v) => update("productUrl", v)} />
         <div>
           <label className="block text-xs font-medium text-stone-600 mb-1">Category</label>
@@ -94,16 +98,48 @@ export function ItemForm({ initial, itemId, onSaved, onCancel }: ItemFormProps) 
         </div>
       </div>
 
-      {form.imageUrl && (
-        <div className="w-20 h-20 rounded-md overflow-hidden border border-stone-200 bg-stone-50">
-          <img
-            src={form.imageUrl}
-            alt="Preview"
-            className="w-full h-full object-cover"
-            onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
-          />
-        </div>
-      )}
+      <div className="flex items-center gap-3">
+        {form.imageUrl && (
+          <div>
+            <span className="block text-xs text-stone-500 mb-1">Product</span>
+            <div className="w-20 h-20 rounded-md overflow-hidden border border-stone-200 bg-stone-50">
+              <img
+                src={form.imageUrl}
+                alt="Product preview"
+                className="w-full h-full object-cover"
+                onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
+              />
+            </div>
+          </div>
+        )}
+        {(form.colorImageUrl || form.color) && (
+          <div>
+            <span className="block text-xs text-stone-500 mb-1">Color</span>
+            {form.colorImageUrl ? (
+              <div className="w-10 h-10 rounded-full overflow-hidden border border-stone-200 bg-stone-50">
+                <img
+                  src={form.colorImageUrl}
+                  alt="Color swatch"
+                  className="w-full h-full object-cover"
+                  onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
+                />
+              </div>
+            ) : (
+              (() => {
+                const hex = colorToHex(form.color);
+                if (!hex) return null;
+                const isGradient = hex.includes("gradient");
+                return (
+                  <div
+                    className="w-10 h-10 rounded-full border border-stone-200"
+                    style={isGradient ? { background: hex } : { backgroundColor: hex }}
+                  />
+                );
+              })()
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="flex gap-2 pt-1">
         <button

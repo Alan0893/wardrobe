@@ -25,6 +25,7 @@ export async function PATCH(
       ...(body.brand !== undefined && { brand: body.brand }),
       ...(body.price !== undefined && { price: body.price }),
       ...(body.imageUrl !== undefined && { imageUrl: body.imageUrl }),
+      ...(body.colorImageUrl !== undefined && { colorImageUrl: body.colorImageUrl }),
       ...(body.category !== undefined && { category: body.category }),
       ...(body.color !== undefined && { color: body.color }),
       ...(body.season !== undefined && { season: body.season }),

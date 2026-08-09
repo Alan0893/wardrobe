@@ -8,17 +8,18 @@ datasource db {
 }
 
 model Item {
-  id         String   @id @default(cuid())
-  name       String
-  brand      String?
-  price      String?
-  imageUrl   String?
-  productUrl String
-  category   String
-  color      String?
-  season     String   @default("ALL_SEASON")
-  createdAt  DateTime @default(now())
-  fits       FitItem[]
+  id            String   @id @default(cuid())
+  name          String
+  brand         String?
+  price         String?
+  imageUrl      String?
+  colorImageUrl String?
+  productUrl    String
+  category      String
+  color         String?
+  season        String   @default("ALL_SEASON")
+  createdAt     DateTime @default(now())
+  fits          FitItem[]
 }
 
 model Fit {
