@@ -20,8 +20,10 @@ export const config = {
     "/",
     "/wardrobe/:path*",
     "/fits/:path*",
+    "/style/:path*",
     "/api/items/:path*",
     "/api/fits/:path*",
     "/api/scrape/:path*",
+    "/api/style-analysis/:path*",
   ],
 };
