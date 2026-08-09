@@ -4,7 +4,8 @@ import { signIn } from "next-auth/react";
 import { useState } from "react";
 import Link from "next/link";
 
-export default function LoginPage() {
+export default function SignupPage() {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -15,14 +16,27 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
 
-    const res = await signIn("credentials", {
+    const res = await fetch("/api/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, name }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error || "Something went wrong");
+      setLoading(false);
+      return;
+    }
+
+    const signInRes = await signIn("credentials", {
       email,
       password,
       redirect: false,
     });
 
-    if (res?.error) {
-      setError("Invalid email or password");
+    if (signInRes?.error) {
+      setError("Account created but sign-in failed. Try logging in.");
       setLoading(false);
     } else {
       window.location.href = "/";
@@ -32,10 +46,10 @@ export default function LoginPage() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh]">
       <h1 className="font-[family-name:var(--font-playfair)] text-3xl font-bold text-ink mb-2">
-        Wardrobe
+        Create Account
       </h1>
       <p className="text-stone-500 text-sm mb-8">
-        Sign in to manage your personal wardrobe
+        Sign up to start building your wardrobe
       </p>
 
       <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4">
@@ -44,6 +58,19 @@ export default function LoginPage() {
             {error}
           </p>
         )}
+
+        <div>
+          <label htmlFor="name" className="block text-sm font-medium text-stone-700 mb-1">
+            Name
+          </label>
+          <input
+            id="name"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-stone-800 focus:border-transparent"
+          />
+        </div>
 
         <div>
           <label htmlFor="email" className="block text-sm font-medium text-stone-700 mb-1">
@@ -69,8 +96,10 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            minLength={6}
             className="w-full px-3 py-2 border border-stone-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-stone-800 focus:border-transparent"
           />
+          <p className="text-xs text-stone-400 mt-1">At least 6 characters</p>
         </div>
 
         <button
@@ -78,14 +107,14 @@ export default function LoginPage() {
           disabled={loading}
           className="w-full py-2.5 bg-ink text-white text-sm font-medium rounded-lg hover:bg-ink-light disabled:opacity-50 transition-colors"
         >
-          {loading ? "Signing in..." : "Sign in"}
+          {loading ? "Creating account..." : "Sign up"}
         </button>
       </form>
 
       <p className="mt-6 text-sm text-stone-500">
-        Don&apos;t have an account?{" "}
-        <Link href="/signup" className="text-stone-800 font-medium hover:underline">
-          Sign up
+        Already have an account?{" "}
+        <Link href="/login" className="text-stone-800 font-medium hover:underline">
+          Sign in
         </Link>
       </p>
     </div>
