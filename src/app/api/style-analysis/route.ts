@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 
-function getOpenAI() {
-  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+function getGemini() {
+  return new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 }
 
 const SYSTEM_PROMPT = `You are a personal fashion stylist AI. The user will provide their wardrobe inventory. Analyze it and return a JSON object with this exact structure:
@@ -45,6 +45,13 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  if (!process.env.GEMINI_API_KEY) {
+    return NextResponse.json(
+      { error: "Style analysis is not configured. Set GEMINI_API_KEY." },
+      { status: 503 }
+    );
+  }
+
   const items = await prisma.item.findMany({
     where: { userId: session.user.id },
     select: { name: true, category: true, color: true, season: true, brand: true },
@@ -61,17 +68,20 @@ export async function POST() {
     .map((item, i) => `${i + 1}. ${item.name} | Category: ${item.category} | Color: ${item.color || "unknown"} | Season: ${item.season} | Brand: ${item.brand || "unknown"}`)
     .join("\n");
 
-  const completion = await getOpenAI().chat.completions.create({
-    model: "gpt-4o",
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: `Here is my wardrobe (${items.length} items):\n\n${wardrobeSummary}` },
-    ],
-    temperature: 0.7,
+  const model = getGemini().getGenerativeModel({
+    model: "gemini-2.0-flash",
+    generationConfig: {
+      temperature: 0.7,
+      responseMimeType: "application/json",
+    },
+    systemInstruction: SYSTEM_PROMPT,
   });
 
-  const content = completion.choices[0]?.message?.content;
+  const result = await model.generateContent(
+    `Here is my wardrobe (${items.length} items):\n\n${wardrobeSummary}`
+  );
+
+  const content = result.response.text();
   if (!content) {
     return NextResponse.json({ error: "AI analysis failed" }, { status: 500 });
   }
