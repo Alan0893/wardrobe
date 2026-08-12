@@ -4,10 +4,15 @@ import { useEffect, useState, useCallback } from "react";
 import { AddItemForm } from "@/components/AddItemForm";
 import { ItemCard, ItemData } from "@/components/ItemCard";
 
+type GenerateMode = "ai" | "rules";
+
 export default function Dashboard() {
   const [items, setItems] = useState<ItemData[]>([]);
   const [fitItems, setFitItems] = useState<ItemData[] | null>(null);
+  const [rationale, setRationale] = useState<string | null>(null);
+  const [lastMode, setLastMode] = useState<GenerateMode>("ai");
   const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState("");
 
   const loadItems = useCallback(async () => {
     const res = await fetch("/api/items");
@@ -19,18 +24,23 @@ export default function Dashboard() {
     loadItems();
   }, [loadItems]);
 
-  async function handleGenerate() {
+  async function handleGenerate(mode: GenerateMode) {
     setGenerating(true);
+    setError("");
+    setLastMode(mode);
     try {
       const res = await fetch("/api/fits/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ mode }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        setFitItems(data.items);
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Could not generate a fit");
+        return;
       }
+      setFitItems(data.items);
+      setRationale(mode === "ai" ? data.rationale || null : null);
     } finally {
       setGenerating(false);
     }
@@ -44,6 +54,7 @@ export default function Dashboard() {
       body: JSON.stringify({ itemIds: fitItems.map((i) => i.id) }),
     });
     setFitItems(null);
+    setRationale(null);
   }
 
   return (
@@ -59,21 +70,35 @@ export default function Dashboard() {
       </section>
 
       <section>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h2 className="font-[family-name:var(--font-playfair)] text-xl font-semibold text-ink">
             Generate a Fit
           </h2>
-          <button
-            onClick={handleGenerate}
-            disabled={generating}
-            className="px-5 py-2.5 bg-ink text-white text-sm font-medium rounded-lg hover:bg-ink-light disabled:opacity-50 transition-colors"
-          >
-            {generating ? "Generating..." : "Generate"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleGenerate("rules")}
+              disabled={generating}
+              className="px-4 py-2.5 bg-white text-stone-700 text-sm font-medium rounded-lg border border-stone-200 hover:border-stone-300 disabled:opacity-50 transition-colors"
+            >
+              {generating && lastMode === "rules" ? "Generating..." : "Quick"}
+            </button>
+            <button
+              onClick={() => handleGenerate("ai")}
+              disabled={generating}
+              className="px-5 py-2.5 bg-ink text-white text-sm font-medium rounded-lg hover:bg-ink-light disabled:opacity-50 transition-colors"
+            >
+              {generating && lastMode === "ai" ? "Styling..." : "AI Fit"}
+            </button>
+          </div>
         </div>
+
+        {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 
         {fitItems && fitItems.length > 0 && (
           <div className="p-4 bg-white rounded-lg border border-stone-200 shadow-sm">
+            {rationale && (
+              <p className="text-sm text-stone-500 mb-3 leading-relaxed">{rationale}</p>
+            )}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
               {fitItems.map((item) => (
                 <div key={item.id} className="text-center">
@@ -103,7 +128,7 @@ export default function Dashboard() {
                 Save This Fit
               </button>
               <button
-                onClick={handleGenerate}
+                onClick={() => handleGenerate(lastMode)}
                 className="px-4 py-2 text-sm text-stone-600 hover:text-stone-800 transition-colors"
               >
                 Regenerate

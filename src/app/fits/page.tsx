@@ -9,10 +9,15 @@ interface FitData {
   items: { item: ItemData }[];
 }
 
+type GenerateMode = "ai" | "rules";
+
 export default function FitsPage() {
   const [fits, setFits] = useState<FitData[]>([]);
   const [currentFit, setCurrentFit] = useState<ItemData[] | null>(null);
+  const [rationale, setRationale] = useState<string | null>(null);
+  const [lastMode, setLastMode] = useState<GenerateMode>("ai");
   const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState("");
 
   const loadFits = useCallback(async () => {
     const res = await fetch("/api/fits");
@@ -24,18 +29,23 @@ export default function FitsPage() {
     loadFits();
   }, [loadFits]);
 
-  async function handleGenerate() {
+  async function handleGenerate(mode: GenerateMode) {
     setGenerating(true);
+    setError("");
+    setLastMode(mode);
     try {
       const res = await fetch("/api/fits/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ mode }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        setCurrentFit(data.items);
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Could not generate a fit");
+        return;
       }
+      setCurrentFit(data.items);
+      setRationale(mode === "ai" ? data.rationale || null : null);
     } finally {
       setGenerating(false);
     }
@@ -49,6 +59,7 @@ export default function FitsPage() {
       body: JSON.stringify({ itemIds: currentFit.map((i) => i.id) }),
     });
     setCurrentFit(null);
+    setRationale(null);
     loadFits();
   }
 
@@ -59,7 +70,7 @@ export default function FitsPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-[family-name:var(--font-playfair)] text-3xl font-bold text-ink mb-1">
             Fits
@@ -68,20 +79,39 @@ export default function FitsPage() {
             Generate outfits and save the ones you like.
           </p>
         </div>
-        <button
-          onClick={handleGenerate}
-          disabled={generating}
-          className="px-5 py-2.5 bg-ink text-white text-sm font-medium rounded-lg hover:bg-ink-light disabled:opacity-50 transition-colors"
-        >
-          {generating ? "Generating..." : "Generate a Fit"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => handleGenerate("rules")}
+            disabled={generating}
+            className="px-4 py-2.5 bg-white text-stone-700 text-sm font-medium rounded-lg border border-stone-200 hover:border-stone-300 disabled:opacity-50 transition-colors"
+          >
+            {generating && lastMode === "rules" ? "Generating..." : "Quick Fit"}
+          </button>
+          <button
+            onClick={() => handleGenerate("ai")}
+            disabled={generating}
+            className="px-5 py-2.5 bg-ink text-white text-sm font-medium rounded-lg hover:bg-ink-light disabled:opacity-50 transition-colors"
+          >
+            {generating && lastMode === "ai" ? "Styling..." : "AI Fit"}
+          </button>
+        </div>
       </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
 
       {currentFit && currentFit.length > 0 && (
         <div className="p-5 bg-white rounded-lg border border-stone-200 shadow-sm">
-          <h2 className="text-sm font-semibold text-stone-700 mb-3">
+          <h2 className="text-sm font-semibold text-stone-700 mb-1">
             Your Generated Fit
+            {lastMode === "ai" && (
+              <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-accent">
+                AI
+              </span>
+            )}
           </h2>
+          {rationale && (
+            <p className="text-sm text-stone-500 mb-3 leading-relaxed">{rationale}</p>
+          )}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
             {currentFit.map((item) => (
               <FitItemThumb key={item.id} item={item} />
@@ -95,13 +125,16 @@ export default function FitsPage() {
               Save This Fit
             </button>
             <button
-              onClick={handleGenerate}
+              onClick={() => handleGenerate(lastMode)}
               className="px-4 py-2 text-sm text-stone-600 hover:text-stone-800 transition-colors"
             >
               Regenerate
             </button>
             <button
-              onClick={() => setCurrentFit(null)}
+              onClick={() => {
+                setCurrentFit(null);
+                setRationale(null);
+              }}
               className="px-4 py-2 text-sm text-stone-400 hover:text-stone-600 transition-colors"
             >
               Dismiss

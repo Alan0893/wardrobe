@@ -698,6 +698,134 @@ async function fetchProductHtml(url: string): Promise<string> {
   return "";
 }
 
+function extractTnfStyleId(url: string): string | null {
+  const m = url.match(/-(NF0A[A-Z0-9]+)\b/i) || url.match(/\/(NF0A[A-Z0-9]+)(?:\?|$)/i);
+  return m?.[1]?.toUpperCase() || null;
+}
+
+function buildTnfImageUrl(styleId: string, colorCode: string): string {
+  const key = `${styleId}${colorCode}`.toUpperCase();
+  return `https://assets.thenorthface.com/images/t_img/c_fill,ar_4:5,f_auto,h_1140,e_sharpen:60,w_912/${key}-HERO/product.png`;
+}
+
+/**
+ * Fallback when the retailer blocks datacenter IPs (common on Vercel).
+ * Uses public readers / metadata APIs that can still reach the page.
+ */
+async function scrapeViaFallback(url: string): Promise<ScrapedProduct> {
+  const empty: ScrapedProduct = {
+    name: "",
+    brand: "",
+    imageUrl: "",
+    colorImageUrl: "",
+    category: "TOP",
+    color: "",
+    season: "ALL_SEASON",
+  };
+
+  let name = "";
+  let brand = "";
+  let imageUrl = "";
+  let color = "";
+  let description = "";
+
+  // 1) Microlink — reliable for title + colour-specific OG image
+  try {
+    const res = await fetch(
+      `https://api.microlink.io?url=${encodeURIComponent(url)}&meta=true`,
+      { headers: { "User-Agent": "Mozilla/5.0" } }
+    );
+    if (res.ok) {
+      const json = (await res.json()) as {
+        status?: string;
+        data?: {
+          title?: string;
+          description?: string;
+          publisher?: string;
+          image?: { url?: string };
+        };
+      };
+      if (json.status === "success" && json.data) {
+        name = json.data.title || "";
+        brand = json.data.publisher || "";
+        description = json.data.description || "";
+        imageUrl = json.data.image?.url || "";
+        // Prefer full product render over tiny OG thumbnail
+        if (imageUrl.includes("/t_Thumbnail/")) {
+          imageUrl = imageUrl.replace(
+            "/t_Thumbnail/",
+            "/t_img/c_fill,ar_4:5,f_auto,h_1140,e_sharpen:60,w_912/"
+          );
+        }
+      }
+    }
+  } catch {
+    /* continue */
+  }
+
+  // 2) Jina reader — often includes visible "Color: …" text when HTML scrapes are blocked
+  try {
+    const res = await fetch(`https://r.jina.ai/${url}`, {
+      headers: { Accept: "text/plain", "User-Agent": "Mozilla/5.0" },
+    });
+    if (res.ok) {
+      const text = await res.text();
+      if (!name) {
+        name = text.match(/^Title:\s*(.+)$/m)?.[1]?.trim() || "";
+      }
+      const colorMatch = text.match(/Colou?r\s*:\s*\n*\s*([A-Za-z][A-Za-z0-9\s\/-]{1,40})/i);
+      if (colorMatch) {
+        color = cleanColorLabel(colorMatch[1]);
+      }
+      if (!imageUrl) {
+        const asset = text.match(
+          /https?:\/\/assets\.thenorthface\.com\/images\/[^\s\]\)]+?(?:HERO|hero)[^\s\]\)]*/i
+        );
+        if (asset) imageUrl = asset[0];
+      }
+      if (!description) {
+        description =
+          text.match(/^Description:\s*(.+)$/m)?.[1]?.trim() ||
+          text.slice(0, 500);
+      }
+    }
+  } catch {
+    /* continue */
+  }
+
+  // 3) TNF CDN construction when we have style + colour codes
+  const colorCode = extractColorCode(url);
+  const tnfStyle = extractTnfStyleId(url);
+  if ((!imageUrl || !looksLikeImageUrl(imageUrl)) && tnfStyle && colorCode) {
+    imageUrl = buildTnfImageUrl(tnfStyle, colorCode);
+  }
+
+  if (!name && !imageUrl) return empty;
+
+  const nameClean = (name.split(/\s*[|–]\s*|\s+-\s+/)[0] || name).trim();
+  if (!brand && /north\s*face/i.test(name + url)) brand = "The North Face";
+  if (!brand && /arc'?teryx/i.test(name + url)) brand = "Arc'teryx";
+  if (!brand && /uniqlo/i.test(name + url)) brand = "Uniqlo";
+  if (!brand && /nike/i.test(name + url)) brand = "Nike";
+  if (/thenorthface/i.test(brand)) brand = "The North Face";
+  if (/arc'?teryx/i.test(brand)) brand = "Arc'teryx";
+  if (/^uniqlo$/i.test(brand)) brand = "Uniqlo";
+  if (/^nike$/i.test(brand)) brand = "Nike";
+
+  const category = guessCategoryFromText(nameClean + " " + url) || "TOP";
+  const season = detectSeason(`${nameClean} ${description}`, category);
+
+  return {
+    name: nameClean,
+    brand,
+    imageUrl: looksLikeImageUrl(imageUrl) ? imageUrl : "",
+    colorImageUrl: "",
+    category,
+    color,
+    season,
+  };
+}
+
 /** Match a URL color/colour code to a label embedded in page JSON (Arc'teryx, etc.) */
 function extractColorLabelNearCode(html: string, colorCode: string): string {
   const unescaped = html
@@ -822,7 +950,7 @@ function extractImageNearColorCode(html: string, colorCode: string): string {
 export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
   const html = await fetchProductHtml(url);
   if (!html) {
-    return { name: "", brand: "", imageUrl: "", colorImageUrl: "", category: "TOP", color: "", season: "ALL_SEASON" };
+    return scrapeViaFallback(url);
   }
 
   const $ = cheerio.load(html);
