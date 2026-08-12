@@ -145,7 +145,11 @@ function cleanColorLabel(text: string): string {
         .trim()
         .split(/[\s_-]+/)
         .filter(Boolean)
-        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .map((w) => {
+          // Preserve short brand acronyms (TNF, DWR, etc.)
+          if (/^[A-Z0-9]{2,4}$/.test(w)) return w;
+          return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+        })
         .join(" ")
     )
     .filter(Boolean)
@@ -499,14 +503,15 @@ function detectSeason(text: string, category: string): string {
 
 // URL patterns that indicate a swatch/chip, not a real product photo
 const SWATCH_PATTERNS = [
-  "chip", "swatch", "color", "colour", "thumbnail", "icon", "badge",
-  "mini", "tiny", "/sw/", "/cs/",
+  "/chip/", "/swatch/", "color-swatch", "colour-swatch", "thumbnail", "icon", "badge",
+  "mini", "tiny", "/sw/", "/cs/", "_chip", "-chip", "t_thumbnail",
 ];
 
 // URL patterns that indicate a real product photo
 const PRODUCT_IMG_PATTERNS = [
   "item", "product", "goods", "large", "main", "hero", "zoom",
   "detail", "pdp", "3x4", "4x5", "full", "1000", "800", "600",
+  "model", "alt1", "back", "assets.thenorthface", "imgix",
 ];
 
 function isSwatchUrl(src: string): boolean {
@@ -519,12 +524,54 @@ function isProductImageUrl(src: string): boolean {
   return PRODUCT_IMG_PATTERNS.some((p) => lower.includes(p));
 }
 
+function looksLikeImageUrl(src: string): boolean {
+  if (!src || src.startsWith("data:")) return false;
+  const lower = src.toLowerCase().split("?")[0];
+  if (/\.(jpg|jpeg|png|webp|gif|avif)(\s|$)/i.test(lower)) return true;
+  // CDN image URLs often omit extensions
+  if (/\/images?\//i.test(src) || /imgix\.net|cloudinary|scene7|assets\./i.test(src)) return true;
+  return false;
+}
+
+function urlContainsColorCode(src: string, colorCode: string): boolean {
+  const lower = src.toLowerCase();
+  const code = colorCode.toLowerCase();
+  return (
+    lower.includes(`_${code}`) ||
+    lower.includes(`/${code}/`) ||
+    lower.includes(`-${code}`) ||
+    lower.includes(`${code}-`) ||
+    lower.includes(`color=${code}`) ||
+    lower.includes(`colour=${code}`) ||
+    // TNF style: NF0A3C8DGOE embeds the colour code at the end of the style id
+    new RegExp(`[a-z0-9]${code}(?:-|_|/|\\.|$)`, "i").test(src)
+  );
+}
+
 function findVariantProductImage(
   $: cheerio.CheerioAPI,
   url: string,
-  colorCode: string | null
+  colorCode: string | null,
+  html = ""
 ): string | null {
   if (!colorCode) return null;
+
+  // 0. Direct CDN/asset URLs embedded in HTML for this colour (TNF, etc.)
+  if (html) {
+    const assetMatches = [
+      ...html.matchAll(/https?:\/\/[^"'\\\s]+/gi),
+    ]
+      .map((m) => m[0].replace(/&amp;/g, "&"))
+      .filter(
+        (src) =>
+          urlContainsColorCode(src, colorCode) &&
+          looksLikeImageUrl(src) &&
+          !isSwatchUrl(src)
+      );
+    const hero = assetMatches.find((src) => /hero|main|primary|front/i.test(src));
+    if (hero) return hero;
+    if (assetMatches[0]) return assetMatches[0];
+  }
 
   // 1. JSON-LD: look for product images containing the color code
   const jsonLdScripts = $('script[type="application/ld+json"]');
@@ -542,7 +589,7 @@ function findVariantProductImage(
           const match = images.find(
             (img: string) =>
               typeof img === "string" &&
-              (img.includes(`_${colorCode}`) || img.includes(`/${colorCode}/`) || img.includes(`-${colorCode}`)) &&
+              urlContainsColorCode(img, colorCode) &&
               !isSwatchUrl(img)
           );
           if (match) return resolveUrl(url, match);
@@ -567,7 +614,8 @@ function findVariantProductImage(
 
   const candidates = allSrcs.filter(
     (src) =>
-      (src.includes(`_${colorCode}`) || src.includes(`/${colorCode}/`) || src.includes(`-${colorCode}`)) &&
+      urlContainsColorCode(src, colorCode) &&
+      looksLikeImageUrl(src) &&
       !isSwatchUrl(src)
   );
 
@@ -657,35 +705,51 @@ function extractColorLabelNearCode(html: string, colorCode: string): string {
     .replace(/\\\//g, "/")
     .replace(/\\"/g, '"');
 
+  // Nuxt / VF.com style: { label: "TNF Black", value: "GOE" }
+  const nuxtLabel = extractColorFromNuxtData(html, colorCode);
+  if (nuxtLabel) return nuxtLabel;
+
   const idToken = `"id":"${colorCode}"`;
+  const valueToken = `"value":"${colorCode}"`;
   let from = 0;
 
   while (from < unescaped.length) {
-    const idIdx = unescaped.indexOf(idToken, from);
+    const idIdx = (() => {
+      const a = unescaped.indexOf(idToken, from);
+      const b = unescaped.indexOf(valueToken, from);
+      if (a === -1) return b;
+      if (b === -1) return a;
+      return Math.min(a, b);
+    })();
     if (idIdx === -1) break;
 
     const before = unescaped.slice(Math.max(0, idIdx - 400), idIdx);
     const after = unescaped.slice(idIdx, idIdx + 500);
 
-    // Closest alt before the id (Arc'teryx: heroImage.alt then hexCode then id)
     const altsBefore = [...before.matchAll(/"alt"\s*:\s*"([^"]{2,80})"/g)].map((m) => m[1]);
-    const afterLabel = after.match(
-      /"(?:label|primaryColour|colourName|colorName|displayName)"\s*:\s*"([^"]{2,60})"/i
-    )?.[1];
-    const candidates = [...altsBefore.slice(-2).reverse(), ...(afterLabel ? [afterLabel] : [])];
+    const labelNearby =
+      before.match(/"label"\s*:\s*"([^"]{2,60})"/i)?.[1] ||
+      after.match(/"label"\s*:\s*"([^"]{2,60})"/i)?.[1] ||
+      after.match(
+        /"(?:primaryColour|colourName|colorName|displayName|colorDescription)"\s*:\s*"([^"]{2,60})"/i
+      )?.[1];
+    const candidates = [
+      ...(labelNearby ? [labelNearby] : []),
+      ...altsBefore.slice(-2).reverse(),
+    ];
 
     for (const raw of candidates) {
       if (!raw) continue;
-      // Prefer short colour labels ("Black / Void") over long image alts
       let candidate = raw
         .replace(/\s+(?:Front|Hover|Side|Back|View).*$/i, "")
         .trim();
 
-      // "Grotto Toque Black / Void" → "Black / Void"
       const slashColour = candidate.match(
-        /\b([A-Z][a-zA-Z]+(?:\s*\/\s*[A-Z][a-zA-Z]+){1,3})\s*$/
+        /\b([A-Z][a-zA-Z0-9]+(?:\s*\/\s*[A-Z][a-zA-Z0-9]+){1,3})\s*$/
       );
-      if (slashColour) candidate = slashColour[1];
+      if (slashColour && /toque|jacket|shirt|pants|hoodie|shoe/i.test(candidate)) {
+        candidate = slashColour[1];
+      }
 
       const cleaned = cleanColorLabel(candidate);
       if (cleaned && cleaned.length <= 40 && !/toque|jacket|shirt|pants|hoodie|shoe/i.test(cleaned)) {
@@ -694,7 +758,36 @@ function extractColorLabelNearCode(html: string, colorCode: string): string {
       if (cleaned && cleaned.length <= 24) return cleaned;
     }
 
-    from = idIdx + idToken.length;
+    from = idIdx + 8;
+  }
+
+  return "";
+}
+
+/** VF.com / Nuxt payload: colour options are { label, value } with numeric refs */
+function extractColorFromNuxtData(html: string, colorCode: string): string {
+  const match = html.match(/id="__NUXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+  if (!match) return "";
+
+  try {
+    const data = JSON.parse(match[1]) as unknown[];
+    const codeIdx = data.findIndex((x) => x === colorCode);
+    if (codeIdx === -1) return "";
+
+    for (let i = 0; i < data.length; i++) {
+      const item = data[i];
+      if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+      const rec = item as Record<string, unknown>;
+      if (rec.value !== codeIdx) continue;
+
+      const labelRef = rec.label;
+      if (typeof labelRef === "number" && typeof data[labelRef] === "string") {
+        const cleaned = cleanColorLabel(data[labelRef] as string);
+        if (cleaned) return cleaned;
+      }
+    }
+  } catch {
+    /* ignore malformed payloads */
   }
 
   return "";
@@ -740,15 +833,16 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
   const ogImage = $('meta[property="og:image"]').attr("content") || "";
   const ogSiteName = $('meta[property="og:site_name"]').attr("content") || "";
 
-  const name =
+  const nameRaw =
     ogTitle ||
     $('meta[name="title"]').attr("content") ||
     $("title").text().trim() ||
     "";
+  const name = nameRaw.split(/\s*[|–]\s*|\s+-\s+/)[0]?.trim() || nameRaw;
 
   // Primary image: color-specific asset from page JSON, then variant search, then OG
   const colorSpecificImage = colorCode ? extractImageNearColorCode(html, colorCode) : "";
-  const variantProductImage = findVariantProductImage($, url, colorCode);
+  const variantProductImage = findVariantProductImage($, url, colorCode, html);
 
   const fallbackImage = ogImage
     ? resolveUrl(url, ogImage)
@@ -760,16 +854,23 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
       ""
     );
 
-  const imageUrl = colorSpecificImage || variantProductImage || fallbackImage;
+  const imageCandidates = [colorSpecificImage, variantProductImage, fallbackImage].filter(
+    (src): src is string => !!src && looksLikeImageUrl(src)
+  );
+  const imageUrl = imageCandidates[0] || "";
 
   // Color swatch image: the small chip showing just the color
   const colorImageUrl = extractColorSwatchImage($, url, colorCode);
 
-  const brand =
+  let brand =
     ogSiteName ||
     $('meta[property="product:brand"]').attr("content") ||
     $('meta[name="author"]').attr("content") ||
     "";
+  if (!brand && /north\s*face/i.test(nameRaw + url)) brand = "The North Face";
+  if (!brand && /arc'?teryx/i.test(nameRaw + url)) brand = "Arc'teryx";
+  if (!brand && /uniqlo/i.test(nameRaw + url)) brand = "Uniqlo";
+  if (!brand && /nike/i.test(nameRaw + url)) brand = "Nike";
 
   const category = detectCategory($, name, url);
   const colorFromCode = colorCode ? extractColorLabelNearCode(html, colorCode) : "";
