@@ -42,7 +42,8 @@ export default function WardrobePage() {
   const [category, setCategory] = useState("ALL");
   const [colorFilter, setColorFilter] = useState("");
   const [editingItem, setEditingItem] = useState<ItemData | null>(null);
-  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
+  /** Which colorway is active per group key */
+  const [selectedByGroup, setSelectedByGroup] = useState<Record<string, string>>({});
 
   const loadItems = useCallback(async () => {
     const params = new URLSearchParams();
@@ -73,19 +74,44 @@ export default function WardrobePage() {
     loadItems();
   }
 
-  function renderEditableCard(item: ItemData, badge?: React.ReactNode) {
+  function renderEditableCard(
+    item: ItemData,
+    options?: {
+      groupKey?: string;
+      variants?: ItemData[];
+    }
+  ) {
     const isEditing = editingItem?.id === item.id;
+    const variants = options?.variants;
+    const groupKey = options?.groupKey;
+
     return (
-      <Fragment key={item.id}>
+      <Fragment key={groupKey || item.id}>
         <ItemCard
           item={item}
+          variants={variants}
+          onSelectVariant={
+            groupKey
+              ? (variant) => {
+                  setSelectedByGroup((prev) => ({ ...prev, [groupKey]: variant.id }));
+                  // Keep edit panel in sync if it was open for another colorway
+                  setEditingItem((current) =>
+                    current && variants?.some((v) => v.id === current.id) ? variant : current
+                  );
+                }
+              : undefined
+          }
           onDelete={handleDelete}
           onEdit={handleEdit}
-          badge={badge}
         />
         {isEditing && (
           <div className="col-span-full p-4 bg-white rounded-lg border border-stone-200 shadow-sm">
-            <h3 className="text-sm font-semibold text-stone-700 mb-3">Edit Item</h3>
+            <h3 className="text-sm font-semibold text-stone-700 mb-3">
+              Edit Item
+              {editingItem.color ? (
+                <span className="ml-2 font-normal text-stone-500">· {editingItem.color}</span>
+              ) : null}
+            </h3>
             <ItemForm
               key={editingItem.id}
               initial={{
@@ -117,7 +143,11 @@ export default function WardrobePage() {
           My Wardrobe
         </h1>
         <p className="text-stone-500 text-sm">
-          {items.length} item{items.length !== 1 ? "s" : ""} in your collection.
+          {items.length} item{items.length !== 1 ? "s" : ""} in your collection
+          {groups.length !== items.length
+            ? ` · ${groups.length} unique style${groups.length !== 1 ? "s" : ""}`
+            : ""}
+          .
         </p>
       </div>
 
@@ -153,42 +183,18 @@ export default function WardrobePage() {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
           {groups.map((group) => {
-            const isExpanded = expandedGroup === group.key;
-
             if (group.items.length === 1) {
               return renderEditableCard(group.items[0]);
             }
 
-            if (isExpanded) {
-              return group.items.map((item) =>
-                renderEditableCard(
-                  item,
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setExpandedGroup(null);
-                    }}
-                    className="absolute top-2 left-2 z-10 bg-stone-800 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md shadow-sm hover:bg-stone-700"
-                  >
-                    Collapse
-                  </button>
-                )
-              );
-            }
+            const selectedId = selectedByGroup[group.key] || group.items[0].id;
+            const selected =
+              group.items.find((i) => i.id === selectedId) || group.items[0];
 
-            return (
-              <div key={group.key} className="contents">
-                {renderEditableCard(
-                  group.items[0],
-                  <button
-                    onClick={() => setExpandedGroup(group.key)}
-                    className="absolute top-2 left-2 z-10 bg-stone-800 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shadow-sm hover:bg-stone-700 transition-colors"
-                  >
-                    {group.items.length}
-                  </button>
-                )}
-              </div>
-            );
+            return renderEditableCard(selected, {
+              groupKey: group.key,
+              variants: group.items,
+            });
           })}
         </div>
       )}
