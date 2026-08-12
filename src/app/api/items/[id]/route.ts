@@ -66,6 +66,16 @@ export async function DELETE(
   });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  await prisma.item.delete({ where: { id } });
+  await prisma.$transaction(async (tx) => {
+    // Fits that include this item are incomplete once it's gone — remove them.
+    await tx.fit.deleteMany({
+      where: {
+        userId: session.user.id,
+        items: { some: { itemId: id } },
+      },
+    });
+    await tx.item.delete({ where: { id } });
+  });
+
   return NextResponse.json({ success: true });
 }
