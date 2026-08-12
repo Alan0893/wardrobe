@@ -38,7 +38,7 @@ Open [http://localhost:3000](http://localhost:3000).
 - Next.js 16 (App Router) + TypeScript + Tailwind CSS
 - Prisma + PostgreSQL (Prisma Postgres)
 - NextAuth v5 (Credentials provider, JWT sessions, bcrypt)
-- Google Gemini (style analysis)
+- Google Gemini Flash Lite (style analysis)
 - cheerio (HTML/OG scraping)
 
 ## Data Model

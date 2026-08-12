@@ -68,28 +68,33 @@ export async function POST() {
     .map((item, i) => `${i + 1}. ${item.name} | Category: ${item.category} | Color: ${item.color || "unknown"} | Season: ${item.season} | Brand: ${item.brand || "unknown"}`)
     .join("\n");
 
-  const model = getGemini().getGenerativeModel({
-    model: "gemini-2.0-flash",
-    generationConfig: {
-      temperature: 0.7,
-      responseMimeType: "application/json",
-    },
-    systemInstruction: SYSTEM_PROMPT,
-  });
-
-  const result = await model.generateContent(
-    `Here is my wardrobe (${items.length} items):\n\n${wardrobeSummary}`
-  );
-
-  const content = result.response.text();
-  if (!content) {
-    return NextResponse.json({ error: "AI analysis failed" }, { status: 500 });
-  }
-
   try {
+    const model = getGemini().getGenerativeModel({
+      model: "gemini-flash-lite-latest",
+      generationConfig: {
+        temperature: 0.7,
+        responseMimeType: "application/json",
+      },
+      systemInstruction: SYSTEM_PROMPT,
+    });
+
+    const result = await model.generateContent(
+      `Here is my wardrobe (${items.length} items):\n\n${wardrobeSummary}`
+    );
+
+    const content = result.response.text();
+    if (!content) {
+      return NextResponse.json({ error: "AI analysis failed" }, { status: 500 });
+    }
+
     const analysis = JSON.parse(content);
     return NextResponse.json(analysis);
-  } catch {
-    return NextResponse.json({ error: "Failed to parse AI response" }, { status: 500 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "AI analysis failed";
+    console.error("Style analysis error:", message);
+    return NextResponse.json(
+      { error: "AI analysis failed. Please try again." },
+      { status: 500 }
+    );
   }
 }
