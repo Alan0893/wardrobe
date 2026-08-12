@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 
 interface StyleAnalysis {
   styleProfile: {
@@ -28,23 +29,40 @@ interface StyleAnalysis {
   };
 }
 
-const CACHE_KEY = "wardrobe-style-analysis";
+function cacheKeyForUser(userId: string) {
+  return `wardrobe-style-analysis:${userId}`;
+}
 
 export default function StylePage() {
+  const { data: session, status } = useSession();
   const [analysis, setAnalysis] = useState<StyleAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const cached = localStorage.getItem(CACHE_KEY);
+    // Drop legacy unscoped cache from earlier builds
+    localStorage.removeItem("wardrobe-style-analysis");
+
+    if (status !== "authenticated" || !session?.user?.id) {
+      setAnalysis(null);
+      return;
+    }
+
+    const cached = localStorage.getItem(cacheKeyForUser(session.user.id));
     if (cached) {
       try {
         setAnalysis(JSON.parse(cached));
-      } catch { /* ignore bad cache */ }
+      } catch {
+        setAnalysis(null);
+      }
+    } else {
+      setAnalysis(null);
     }
-  }, []);
+  }, [status, session?.user?.id]);
 
   async function handleAnalyze() {
+    if (!session?.user?.id) return;
+
     setLoading(true);
     setError("");
     try {
@@ -56,7 +74,7 @@ export default function StylePage() {
       }
       const data = await res.json();
       setAnalysis(data);
-      localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+      localStorage.setItem(cacheKeyForUser(session.user.id), JSON.stringify(data));
     } catch {
       setError("Something went wrong. Try again.");
     } finally {
