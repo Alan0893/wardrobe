@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Fragment } from "react";
 import { ItemCard, ItemData } from "@/components/ItemCard";
 import { ItemForm } from "@/components/ItemForm";
 
@@ -60,16 +60,52 @@ export default function WardrobePage() {
 
   async function handleDelete(id: string) {
     await fetch(`/api/items/${id}`, { method: "DELETE" });
+    if (editingItem?.id === id) setEditingItem(null);
     loadItems();
   }
 
   function handleEdit(item: ItemData) {
-    setEditingItem(item);
+    setEditingItem((current) => (current?.id === item.id ? null : item));
   }
 
   function handleEditSaved() {
     setEditingItem(null);
     loadItems();
+  }
+
+  function renderEditableCard(item: ItemData, badge?: React.ReactNode) {
+    const isEditing = editingItem?.id === item.id;
+    return (
+      <Fragment key={item.id}>
+        <ItemCard
+          item={item}
+          onDelete={handleDelete}
+          onEdit={handleEdit}
+          badge={badge}
+        />
+        {isEditing && (
+          <div className="col-span-full p-4 bg-white rounded-lg border border-stone-200 shadow-sm">
+            <h3 className="text-sm font-semibold text-stone-700 mb-3">Edit Item</h3>
+            <ItemForm
+              key={editingItem.id}
+              initial={{
+                name: editingItem.name,
+                brand: editingItem.brand || "",
+                imageUrl: editingItem.imageUrl || "",
+                colorImageUrl: editingItem.colorImageUrl || "",
+                productUrl: editingItem.productUrl,
+                category: editingItem.category,
+                color: editingItem.color,
+                season: editingItem.season,
+              }}
+              itemId={editingItem.id}
+              onSaved={handleEditSaved}
+              onCancel={() => setEditingItem(null)}
+            />
+          </div>
+        )}
+      </Fragment>
+    );
   }
 
   const groups = groupItems(items);
@@ -109,27 +145,6 @@ export default function WardrobePage() {
         />
       </div>
 
-      {editingItem && (
-        <div className="p-4 bg-white rounded-lg border border-stone-200 shadow-sm">
-          <h3 className="text-sm font-semibold text-stone-700 mb-3">Edit Item</h3>
-          <ItemForm
-            initial={{
-              name: editingItem.name,
-              brand: editingItem.brand || "",
-              imageUrl: editingItem.imageUrl || "",
-              colorImageUrl: editingItem.colorImageUrl || "",
-              productUrl: editingItem.productUrl,
-              category: editingItem.category,
-              color: editingItem.color,
-              season: editingItem.season,
-            }}
-            itemId={editingItem.id}
-            onSaved={handleEditSaved}
-            onCancel={() => setEditingItem(null)}
-          />
-        </div>
-      )}
-
       {items.length === 0 ? (
         <div className="text-center py-16 text-stone-400">
           <p className="text-lg">No items yet</p>
@@ -141,51 +156,37 @@ export default function WardrobePage() {
             const isExpanded = expandedGroup === group.key;
 
             if (group.items.length === 1) {
-              return (
-                <ItemCard
-                  key={group.items[0].id}
-                  item={group.items[0]}
-                  onDelete={handleDelete}
-                  onEdit={handleEdit}
-                />
-              );
+              return renderEditableCard(group.items[0]);
             }
 
             if (isExpanded) {
-              return group.items.map((item) => (
-                <ItemCard
-                  key={item.id}
-                  item={item}
-                  onDelete={handleDelete}
-                  onEdit={handleEdit}
-                  badge={
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setExpandedGroup(null);
-                      }}
-                      className="absolute top-2 left-2 z-10 bg-stone-800 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md shadow-sm hover:bg-stone-700"
-                    >
-                      Collapse
-                    </button>
-                  }
-                />
-              ));
+              return group.items.map((item) =>
+                renderEditableCard(
+                  item,
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExpandedGroup(null);
+                    }}
+                    className="absolute top-2 left-2 z-10 bg-stone-800 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md shadow-sm hover:bg-stone-700"
+                  >
+                    Collapse
+                  </button>
+                )
+              );
             }
 
             return (
-              <div key={group.key} className="relative">
-                <button
-                  onClick={() => setExpandedGroup(group.key)}
-                  className="absolute top-2 left-2 z-10 bg-stone-800 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shadow-sm hover:bg-stone-700 transition-colors"
-                >
-                  {group.items.length}
-                </button>
-                <ItemCard
-                  item={group.items[0]}
-                  onDelete={handleDelete}
-                  onEdit={handleEdit}
-                />
+              <div key={group.key} className="contents">
+                {renderEditableCard(
+                  group.items[0],
+                  <button
+                    onClick={() => setExpandedGroup(group.key)}
+                    className="absolute top-2 left-2 z-10 bg-stone-800 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shadow-sm hover:bg-stone-700 transition-colors"
+                  >
+                    {group.items.length}
+                  </button>
+                )}
               </div>
             );
           })}
