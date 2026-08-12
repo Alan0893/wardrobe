@@ -137,7 +137,7 @@ function cleanColorLabel(text: string): string {
     return "";
   }
 
-  // Keep colorway slashes (Nike: "Black/White/Clover")
+  // Keep colorway slashes (Nike / Arc'teryx: "Black / White")
   return t
     .split("/")
     .map((seg) =>
@@ -149,7 +149,7 @@ function cleanColorLabel(text: string): string {
         .join(" ")
     )
     .filter(Boolean)
-    .join("/");
+    .join(" / ");
 }
 
 function looksLikeColorCode(value: string): boolean {
@@ -598,12 +598,13 @@ function extractColorCode(url: string): string | null {
       u.searchParams.get("colorDisplayCode") ||
       u.searchParams.get("colorId") ||
       u.searchParams.get("dwvar_color") ||
+      u.searchParams.get("colour") ||
       u.searchParams.get("color");
     if (direct) return direct;
 
     for (const [key, value] of u.searchParams) {
-      if (/^dwvar_.*_color$/i.test(key) && value) return value;
-      if (/color/i.test(key) && value && looksLikeColorCode(value)) return value;
+      if (/^dwvar_.*_colou?r$/i.test(key) && value) return value;
+      if (/colou?r/i.test(key) && value && looksLikeColorCode(value)) return value;
     }
     return null;
   } catch {
@@ -611,23 +612,126 @@ function extractColorCode(url: string): string | null {
   }
 }
 
+function isBotBlockPage(html: string, status: number): boolean {
+  if (status === 403 || status === 429 || status === 503) return true;
+  if (html.length < 5000 && /KPSDK|captcha|Access Denied|Just a moment|cf-browser-verification/i.test(html)) {
+    return true;
+  }
+  return false;
+}
+
+async function fetchProductHtml(url: string): Promise<string> {
+  const userAgents = [
+    // Prefer a normal browser UA for sites that fingerprint bots
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    // Some storefronts (Arc'teryx/Kasada) serve full HTML to Googlebot while blocking browsers
+    "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+  ];
+
+  for (const ua of userAgents) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          "User-Agent": ua,
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+        redirect: "follow",
+      });
+      const html = await res.text();
+      if (!isBotBlockPage(html, res.status) && html.length > 2000) {
+        return html;
+      }
+    } catch {
+      /* try next UA */
+    }
+  }
+
+  return "";
+}
+
+/** Match a URL color/colour code to a label embedded in page JSON (Arc'teryx, etc.) */
+function extractColorLabelNearCode(html: string, colorCode: string): string {
+  const unescaped = html
+    .replace(/\\u002F/g, "/")
+    .replace(/\\\//g, "/")
+    .replace(/\\"/g, '"');
+
+  const idToken = `"id":"${colorCode}"`;
+  let from = 0;
+
+  while (from < unescaped.length) {
+    const idIdx = unescaped.indexOf(idToken, from);
+    if (idIdx === -1) break;
+
+    const before = unescaped.slice(Math.max(0, idIdx - 400), idIdx);
+    const after = unescaped.slice(idIdx, idIdx + 500);
+
+    // Closest alt before the id (Arc'teryx: heroImage.alt then hexCode then id)
+    const altsBefore = [...before.matchAll(/"alt"\s*:\s*"([^"]{2,80})"/g)].map((m) => m[1]);
+    const afterLabel = after.match(
+      /"(?:label|primaryColour|colourName|colorName|displayName)"\s*:\s*"([^"]{2,60})"/i
+    )?.[1];
+    const candidates = [...altsBefore.slice(-2).reverse(), ...(afterLabel ? [afterLabel] : [])];
+
+    for (const raw of candidates) {
+      if (!raw) continue;
+      // Prefer short colour labels ("Black / Void") over long image alts
+      let candidate = raw
+        .replace(/\s+(?:Front|Hover|Side|Back|View).*$/i, "")
+        .trim();
+
+      // "Grotto Toque Black / Void" → "Black / Void"
+      const slashColour = candidate.match(
+        /\b([A-Z][a-zA-Z]+(?:\s*\/\s*[A-Z][a-zA-Z]+){1,3})\s*$/
+      );
+      if (slashColour) candidate = slashColour[1];
+
+      const cleaned = cleanColorLabel(candidate);
+      if (cleaned && cleaned.length <= 40 && !/toque|jacket|shirt|pants|hoodie|shoe/i.test(cleaned)) {
+        return cleaned;
+      }
+      if (cleaned && cleaned.length <= 24) return cleaned;
+    }
+
+    from = idIdx + idToken.length;
+  }
+
+  return "";
+}
+
+/** Pull the product image for a colour id from embedded storefront JSON */
+function extractImageNearColorCode(html: string, colorCode: string): string {
+  const unescaped = html
+    .replace(/\\u002F/g, "/")
+    .replace(/\\\//g, "/")
+    .replace(/\\"/g, '"');
+
+  const idToken = `"id":"${colorCode}"`;
+  const idIdx = unescaped.indexOf(idToken);
+  if (idIdx === -1) return "";
+
+  const around = unescaped.slice(idIdx, idIdx + 1200);
+  const match = around.match(
+    /"imageAssets"\s*:\s*\[\s*\{\s*"image"\s*:\s*\{\s*"url"\s*:\s*"(https?:\/\/[^"]+)"/i
+  );
+  if (match) return match[1];
+
+  const before = unescaped.slice(Math.max(0, idIdx - 500), idIdx);
+  const hero = before.match(
+    /"url"\s*:\s*"(https?:\/\/[^"]+(?:Front|Hover)[^"]*\.(?:jpg|jpeg|png|webp))"/i
+  );
+  return hero?.[1] || "";
+}
+
 // --- Main ---
 
 export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      Accept: "text/html,application/xhtml+xml",
-    },
-    redirect: "follow",
-  });
-
-  if (!res.ok) {
+  const html = await fetchProductHtml(url);
+  if (!html) {
     return { name: "", brand: "", imageUrl: "", colorImageUrl: "", category: "TOP", color: "", season: "ALL_SEASON" };
   }
 
-  const html = await res.text();
   const $ = cheerio.load(html);
 
   const colorCode = extractColorCode(url);
@@ -642,7 +746,8 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
     $("title").text().trim() ||
     "";
 
-  // Primary image: try to find the color-correct product photo first
+  // Primary image: color-specific asset from page JSON, then variant search, then OG
+  const colorSpecificImage = colorCode ? extractImageNearColorCode(html, colorCode) : "";
   const variantProductImage = findVariantProductImage($, url, colorCode);
 
   const fallbackImage = ogImage
@@ -655,7 +760,7 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
       ""
     );
 
-  const imageUrl = variantProductImage || fallbackImage;
+  const imageUrl = colorSpecificImage || variantProductImage || fallbackImage;
 
   // Color swatch image: the small chip showing just the color
   const colorImageUrl = extractColorSwatchImage($, url, colorCode);
@@ -667,7 +772,8 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
     "";
 
   const category = detectCategory($, name, url);
-  const color = detectColor($, name, url, colorCode, html);
+  const colorFromCode = colorCode ? extractColorLabelNearCode(html, colorCode) : "";
+  const color = colorFromCode || detectColor($, name, url, colorCode, html);
 
   const descriptionText =
     $('meta[name="description"]').attr("content") ||
