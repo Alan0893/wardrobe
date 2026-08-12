@@ -19,10 +19,13 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
     "flip-flop", "slide", "espadrille", "pump", "flat", "ankle boot",
   ],
   OUTERWEAR: [
-    "jacket", "coat", "hoodie", "parka", "blazer", "cardigan", "sweater",
-    "vest", "pullover", "fleece", "windbreaker", "anorak", "bomber",
+    "jacket", "coat", "parka", "blazer", "windbreaker", "anorak", "bomber",
     "overcoat", "trench", "raincoat", "puffer", "down jacket", "denim jacket",
     "shacket", "overshirt",
+  ],
+  MIDLAYER: [
+    "sweater", "hoodie", "cardigan", "pullover", "fleece", "knit",
+    "crewneck", "crew neck", "sweatshirt", "turtleneck", "vest", "knitwear",
   ],
   BOTTOM: [
     "pant", "jean", "short", "skirt", "trouser", "legging", "jogger",
@@ -31,9 +34,8 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
   ],
   TOP: [
     "shirt", "tee", "t-shirt", "blouse", "polo", "tank", "camisole",
-    "turtleneck", "henley", "crewneck", "button-down", "oxford shirt",
-    "sweatshirt", "crew neck", "v-neck", "long sleeve", "short sleeve",
-    "dress shirt", "flannel shirt", "top",
+    "henley", "button-down", "oxford shirt", "v-neck", "long sleeve",
+    "short sleeve", "dress shirt", "flannel shirt", "top",
   ],
   ACCESSORY: [
     "hat", "bag", "belt", "scarf", "watch", "jewelry", "sunglasses",
@@ -44,7 +46,8 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
 
 const CATEGORY_PATH_SIGNALS: Record<string, string[]> = {
   SHOES: ["shoes", "footwear", "sneakers", "boots", "sandals"],
-  OUTERWEAR: ["outerwear", "jackets", "coats", "sweaters", "hoodies", "knitwear"],
+  OUTERWEAR: ["outerwear", "jackets", "coats"],
+  MIDLAYER: ["sweaters", "hoodies", "knitwear", "fleece"],
   BOTTOM: ["bottoms", "pants", "jeans", "shorts", "skirts", "trousers"],
   TOP: ["tops", "shirts", "t-shirts", "tees", "blouses", "polos"],
   ACCESSORY: ["accessories", "bags", "hats", "jewelry", "belts", "watches", "socks"],

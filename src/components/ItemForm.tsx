@@ -3,8 +3,17 @@
 import { useState } from "react";
 import { colorToHex } from "@/lib/colorHex";
 
-const CATEGORIES = ["TOP", "BOTTOM", "SHOES", "OUTERWEAR", "ACCESSORY"];
+const CATEGORIES = ["TOP", "MIDLAYER", "BOTTOM", "SHOES", "OUTERWEAR", "ACCESSORY"];
 const SEASONS = ["ALL_SEASON", "SUMMER", "WINTER"];
+
+const CATEGORY_LABELS: Record<string, string> = {
+  TOP: "Top",
+  MIDLAYER: "Mid-layer",
+  BOTTOM: "Bottom",
+  SHOES: "Shoes",
+  OUTERWEAR: "Outerwear",
+  ACCESSORY: "Accessory",
+};
 
 interface ItemFormProps {
   initial: {
@@ -74,7 +83,7 @@ export function ItemForm({ initial, itemId, onSaved, onCancel }: ItemFormProps) 
           >
             {CATEGORIES.map((c) => (
               <option key={c} value={c}>
-                {c.charAt(0) + c.slice(1).toLowerCase()}
+                {CATEGORY_LABELS[c] || c}
               </option>
             ))}
           </select>

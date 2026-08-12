@@ -116,7 +116,7 @@ export default function StylePage() {
             <h2 className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-4">
               Category Balance
             </h2>
-            <div className="grid grid-cols-5 gap-3 mb-4">
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-4">
               {Object.entries(analysis.categoryBalance.breakdown).map(([cat, count]) => (
                 <div key={cat} className="text-center">
                   <div className="text-2xl font-bold text-ink">{count}</div>

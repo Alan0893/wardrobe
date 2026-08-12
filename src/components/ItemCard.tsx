@@ -25,6 +25,7 @@ interface ItemCardProps {
 
 const CATEGORY_LABELS: Record<string, string> = {
   TOP: "Top",
+  MIDLAYER: "Mid-layer",
   BOTTOM: "Bottom",
   SHOES: "Shoes",
   OUTERWEAR: "Outerwear",

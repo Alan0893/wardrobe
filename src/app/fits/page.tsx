@@ -153,6 +153,16 @@ export default function FitsPage() {
 }
 
 function FitItemThumb({ item }: { item: ItemData }) {
+  const categoryLabel =
+    ({
+      TOP: "Top",
+      MIDLAYER: "Mid-layer",
+      BOTTOM: "Bottom",
+      SHOES: "Shoes",
+      OUTERWEAR: "Outerwear",
+      ACCESSORY: "Accessory",
+    } as Record<string, string>)[item.category] || item.category;
+
   return (
     <div className="text-center">
       <div className="aspect-square rounded-md overflow-hidden bg-stone-100 mb-1.5">
@@ -169,9 +179,7 @@ function FitItemThumb({ item }: { item: ItemData }) {
         )}
       </div>
       <p className="text-xs text-stone-600 line-clamp-1">{item.name}</p>
-      <p className="text-[10px] text-stone-400">
-        {item.category.charAt(0) + item.category.slice(1).toLowerCase()}
-      </p>
+      <p className="text-[10px] text-stone-400">{categoryLabel}</p>
     </div>
   );
 }

@@ -4,7 +4,17 @@ import { useEffect, useState, useCallback } from "react";
 import { ItemCard, ItemData } from "@/components/ItemCard";
 import { ItemForm } from "@/components/ItemForm";
 
-const CATEGORIES = ["ALL", "TOP", "BOTTOM", "SHOES", "OUTERWEAR", "ACCESSORY"];
+const CATEGORIES = ["ALL", "TOP", "MIDLAYER", "BOTTOM", "SHOES", "OUTERWEAR", "ACCESSORY"];
+
+const CATEGORY_LABELS: Record<string, string> = {
+  ALL: "All",
+  TOP: "Top",
+  MIDLAYER: "Mid-layer",
+  BOTTOM: "Bottom",
+  SHOES: "Shoes",
+  OUTERWEAR: "Outerwear",
+  ACCESSORY: "Accessory",
+};
 
 interface ItemGroup {
   key: string;
@@ -86,7 +96,7 @@ export default function WardrobePage() {
                 : "bg-white text-stone-600 border border-stone-200 hover:border-stone-300"
                 }`}
             >
-              {cat === "ALL" ? "All" : cat.charAt(0) + cat.slice(1).toLowerCase()}
+              {CATEGORY_LABELS[cat] || cat}
             </button>
           ))}
         </div>

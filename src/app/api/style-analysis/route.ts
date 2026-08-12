@@ -15,7 +15,7 @@ const SYSTEM_PROMPT = `You are a personal fashion stylist AI. The user will prov
     "description": "A 2-3 sentence description of their style identity based on what they own."
   },
   "categoryBalance": {
-    "breakdown": { "TOP": 0, "BOTTOM": 0, "SHOES": 0, "OUTERWEAR": 0, "ACCESSORY": 0 },
+    "breakdown": { "TOP": 0, "MIDLAYER": 0, "BOTTOM": 0, "SHOES": 0, "OUTERWEAR": 0, "ACCESSORY": 0 },
     "assessment": "A sentence about whether the wardrobe is balanced or skewed.",
     "suggestion": "What category they should focus on next."
   },

@@ -150,14 +150,24 @@ const STANDALONE_TOP_KEYWORDS = [
   "printed shirt", "patterned shirt", "silk shirt",
 ];
 
-function isMidLayer(name: string): boolean {
-  const lower = name.toLowerCase();
-  return MID_LAYER_KEYWORDS.some((kw) => lower.includes(kw));
+function isMidLayer(item: FitItem): boolean {
+  if (item.category === "MIDLAYER") return true;
+  // Legacy: sweaters previously saved as OUTERWEAR
+  if (item.category === "OUTERWEAR") {
+    const lower = item.name.toLowerCase();
+    return MID_LAYER_KEYWORDS.some((kw) => lower.includes(kw));
+  }
+  return false;
 }
 
-function isOuterLayer(name: string): boolean {
-  const lower = name.toLowerCase();
-  return OUTER_LAYER_KEYWORDS.some((kw) => lower.includes(kw));
+function isOuterLayer(item: FitItem): boolean {
+  if (item.category === "OUTERWEAR") {
+    const lower = item.name.toLowerCase();
+    // Legacy outerwear items that are actually mid-layers
+    if (MID_LAYER_KEYWORDS.some((kw) => lower.includes(kw))) return false;
+    return true;
+  }
+  return OUTER_LAYER_KEYWORDS.some((kw) => item.name.toLowerCase().includes(kw));
 }
 
 /**
@@ -166,9 +176,7 @@ function isOuterLayer(name: string): boolean {
  */
 function isStandaloneTop(item: FitItem): boolean {
   const lower = item.name.toLowerCase();
-  // Keyword match
   if (STANDALONE_TOP_KEYWORDS.some((kw) => lower.includes(kw))) return true;
-  // Short sleeve shirts in summer are standalone
   if (item.season === "SUMMER" && lower.includes("short sleeve")) return true;
   return false;
 }
@@ -207,7 +215,7 @@ export async function generateFit(userId: string, season?: string): Promise<FitI
     const candidate: FitItem[] = [];
     const usedIds = new Set<string>();
 
-    // Base top
+    // Base top (shirts, tees, polos — not sweaters)
     const tops = filterBySeason(byCategory["TOP"] || []);
     const top = pickRandom(tops);
     if (top) {
@@ -219,13 +227,11 @@ export async function generateFit(userId: string, season?: string): Promise<FitI
     const standalone = top ? isStandaloneTop(top) : false;
 
     if (!standalone) {
-      // Mid-layer (sweater/cardigan)
-      const outerwearPool = filterBySeason(byCategory["OUTERWEAR"] || []);
-      const midLayers = outerwearPool.filter((i) => isMidLayer(i.name));
-      const outerLayers = outerwearPool.filter((i) => isOuterLayer(i.name));
-      const ambiguous = outerwearPool.filter((i) => !isMidLayer(i.name) && !isOuterLayer(i.name));
-      const midPool = [...midLayers, ...ambiguous];
-      const outerPool = [...outerLayers, ...ambiguous];
+      const midlayerCat = filterBySeason(byCategory["MIDLAYER"] || []);
+      const outerwearCat = filterBySeason(byCategory["OUTERWEAR"] || []);
+      const legacyMids = outerwearCat.filter((i) => isMidLayer(i));
+      const trueOuters = outerwearCat.filter((i) => isOuterLayer(i));
+      const midPool = [...midlayerCat, ...legacyMids];
 
       if (midPool.length > 0 && Math.random() > 0.4) {
         const mid = pickRandom(midPool);
@@ -235,8 +241,7 @@ export async function generateFit(userId: string, season?: string): Promise<FitI
         }
       }
 
-      // Outer layer (jacket/coat)
-      const availableOuter = outerPool.filter((i) => !usedIds.has(i.id));
+      const availableOuter = trueOuters.filter((i) => !usedIds.has(i.id));
       if (availableOuter.length > 0 && Math.random() > 0.5) {
         const outer = pickRandom(availableOuter);
         if (outer) {
