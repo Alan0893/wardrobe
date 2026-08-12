@@ -60,9 +60,10 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const userId = session.user.id;
   const { id } = await params;
   const existing = await prisma.item.findFirst({
-    where: { id, userId: session.user.id },
+    where: { id, userId },
   });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -70,7 +71,7 @@ export async function DELETE(
     // Fits that include this item are incomplete once it's gone — remove them.
     await tx.fit.deleteMany({
       where: {
-        userId: session.user.id,
+        userId,
         items: { some: { itemId: id } },
       },
     });
