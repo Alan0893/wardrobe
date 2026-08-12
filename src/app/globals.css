@@ -20,9 +20,15 @@
   --font-display: var(--font-playfair);
 }
 
-body {
+html {
+  min-height: 100%;
   background: linear-gradient(165deg, #f5f5f4 0%, #ebe8e5 50%, #e7e5e4 100%);
+  background-attachment: fixed;
+}
+
+body {
+  background: transparent;
   color: var(--color-ink);
   font-family: var(--font-sans), system-ui, sans-serif;
-  min-height: 100vh;
+  min-height: 100%;
 }

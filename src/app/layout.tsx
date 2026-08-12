@@ -27,11 +27,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${dmSans.variable} ${playfair.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col">
+    <html lang="en" className={`${dmSans.variable} ${playfair.variable} antialiased`}>
+      <body>
         <Providers>
           <Nav />
-          <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 py-8">
+          <main className="w-full max-w-6xl mx-auto px-4 sm:px-6 py-8 pb-12">
             {children}
           </main>
         </Providers>
