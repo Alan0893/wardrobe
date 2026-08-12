@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
 
   const where: Record<string, unknown> = { userId: session.user.id };
   if (category) where.category = category;
-  if (color) where.color = { contains: color };
+  if (color) where.color = { contains: color, mode: "insensitive" };
 
   const items = await prisma.item.findMany({
     where,

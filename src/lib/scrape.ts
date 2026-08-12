@@ -114,28 +114,244 @@ function detectCategory($: cheerio.CheerioAPI, name: string, url: string): strin
 
 // --- Color Detection ---
 
-function detectColor($: cheerio.CheerioAPI, name: string, url: string): string {
-  // 1. Selected/active color swatch text
-  const swatchSelectors = [
-    '[class*="color"] [class*="selected"]',
-    '[class*="color"] [class*="active"]',
-    '[class*="color"] [aria-checked="true"]',
-    '[data-testid*="selected-color"]',
-    '[class*="selectedColor"]',
-    '[class*="color-name"]',
-    '[class*="colorName"]',
-    '[class*="product-color"] span',
-    '#selected-color-value',
+function cleanColorLabel(text: string): string {
+  let t = text
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^colou?r\s*[:#-]\s*/i, "")
+    .replace(/^shown\s*[:#-]\s*/i, "")
+    .replace(/^colorway\s*[:#-]\s*/i, "")
+    .replace(/^\d{1,3}\s+/, "")
+    // Size / gender chrome that often trails Uniqlo-style labels
+    .replace(/\s+(?:men|women|unisex|kids)\b.*$/i, "")
+    .replace(/\s+(?:xxs|xs|s|m|l|xl|xxl|3xl)\b.*$/i, "")
+    .replace(/\s*(?:style|size|qty|quantity|view product|select a?)\b.*$/i, "")
+    .trim();
+
+  if (!t || t.length > 80) return "";
+  if (
+    /^(select|choose|available|shop by|color)$/i.test(t) ||
+    /click|cookie|privacy|page \d|add to|wishlist|shipping|sign in/i.test(t) ||
+    (/t-shirt|hoodie|jacket|pants|shoes|default image/i.test(t) && t.length > 25)
+  ) {
+    return "";
+  }
+
+  // Keep colorway slashes (Nike: "Black/White/Clover")
+  return t
+    .split("/")
+    .map((seg) =>
+      seg
+        .trim()
+        .split(/[\s_-]+/)
+        .filter(Boolean)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(" ")
+    )
+    .filter(Boolean)
+    .join("/");
+}
+
+function looksLikeColorCode(value: string): boolean {
+  if (!value) return false;
+  if (/^(black|white|navy|blue|red|green|grey|gray|pink|olive|cream|beige|brown)$/i.test(value)) {
+    return false;
+  }
+  return /^[A-Z0-9]{1,8}$/i.test(value);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function labelFromElement($: cheerio.CheerioAPI, el: any): string {
+  const node = $(el);
+  const candidates = [
+    node.attr("aria-label"),
+    node.attr("title"),
+    node.attr("data-displayname"),
+    node.attr("data-display-name"),
+    node.attr("data-color-name"),
+    node.attr("data-name"),
+    node.attr("data-value-name"),
+    node.find("img").first().attr("alt"),
+    node.find("img").first().attr("title"),
+    node.attr("alt"),
+    node.text(),
+  ];
+  for (const raw of candidates) {
+    const cleaned = cleanColorLabel(raw || "");
+    if (cleaned) return cleaned;
+  }
+  return "";
+}
+
+function extractColorFromEmbeddedJson(html: string, colorCode: string | null): string {
+  const patterns = [
+    /"colorDescription"\s*:\s*"([^"]{2,80})"/gi,
+    /"selectedColorDescription"\s*:\s*"([^"]{2,80})"/gi,
+    /"currentColor(?:Description)?"\s*:\s*"([^"]{2,80})"/gi,
+    /"colorName"\s*:\s*"([^"]{2,80})"/gi,
+    /"displayColor(?:Name)?"\s*:\s*"([^"]{2,80})"/gi,
+    /"selectedColor(?:Name)?"\s*:\s*"([^"]{2,80})"/gi,
+    /"colorway"\s*:\s*"([^"]{2,80})"/gi,
   ];
 
-  for (const selector of swatchSelectors) {
-    const text = $(selector).first().text().trim();
-    if (text && text.length < 40) {
-      return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+  for (const re of patterns) {
+    const hits = [...html.matchAll(re)]
+      .map((m) => cleanColorLabel(m[1]))
+      .filter(Boolean)
+      .filter((v) => !/#[0-9a-f]{3,8}|rgb\(|var\(--/i.test(v));
+    if (!hits.length) continue;
+
+    // If we have a color code, prefer a nearby hit — otherwise first plausible one
+    if (colorCode) {
+      const codeRe = new RegExp(
+        `${colorCode.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[\\s\\S]{0,180}"(?:colorDescription|colorName|colorway)"\\s*:\\s*"([^"]+)"|"([^"]+)"\\s*[\\s\\S]{0,180}${colorCode.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+        "i"
+      );
+      const near = html.match(codeRe);
+      if (near) {
+        const cleaned = cleanColorLabel(near[1] || near[2] || "");
+        if (cleaned) return cleaned;
+      }
+    }
+
+    // Prefer the first hit that contains a known color word
+    const withKnown = hits.find((h) => matchColorKeyword(h));
+    if (withKnown) return withKnown;
+    if (hits[0]) return hits[0];
+  }
+
+  return "";
+}
+
+function detectColor(
+  $: cheerio.CheerioAPI,
+  name: string,
+  url: string,
+  colorCode: string | null,
+  html: string
+): string {
+  // 1. Selected swatch / option (aria state + selected/active classes)
+  const selectedSelectors = [
+    '[aria-checked="true"]',
+    '[aria-pressed="true"]',
+    '[aria-current="true"]',
+    '[aria-selected="true"]',
+    '[class*="swatch"][class*="selected"]',
+    '[class*="swatch"][class*="active"]',
+    '[class*="color"][class*="selected"]',
+    '[class*="color"][class*="active"]',
+    '[class*="Color"][class*="selected"]',
+    '[data-testid*="color"][class*="selected"]',
+    '[data-attr="color"] [class*="selected"]',
+    '[data-attribute="color"] [class*="selected"]',
+    '.swatch.selected',
+    '.selected-swatch',
+  ];
+  for (const selector of selectedSelectors) {
+    for (const el of $(selector).toArray().slice(0, 8)) {
+      const label = labelFromElement($, el);
+      if (label) return label;
     }
   }
 
-  // 2. JSON-LD color property
+  // 2. URL color code → matching swatch/option label/alt/src
+  if (colorCode) {
+    const codeLower = colorCode.toLowerCase();
+
+    // Chip/swatch images whose filename embeds the code (works on Uniqlo and similar CDNs)
+    const chipImgs = $(
+      'img[src*="chip"], img[src*="swatch"], img[src*="color"], [class*="swatch"] img, [class*="color"] img'
+    );
+    for (const el of chipImgs.toArray()) {
+      const src = ($(el).attr("src") || $(el).attr("data-src") || "").toLowerCase();
+      if (
+        src.includes(`_${codeLower}_`) ||
+        src.includes(`_${codeLower}.`) ||
+        src.includes(`goods_${codeLower}_`) ||
+        src.includes(`/${codeLower}/`) ||
+        src.includes(`-${codeLower}.`) ||
+        src.includes(`color=${codeLower}`)
+      ) {
+        const label = cleanColorLabel($(el).attr("alt") || $(el).attr("title") || "");
+        if (label) return label;
+      }
+    }
+
+    const candidates = $(
+      "button, a, input, li, div, span, img, [role='option'], [role='radio'], [role='button']"
+    ).toArray();
+
+    for (const el of candidates) {
+      const node = $(el);
+      const attrs = [
+        node.attr("data-value"),
+        node.attr("data-color"),
+        node.attr("data-attr-value"),
+        node.attr("data-id"),
+        node.attr("value"),
+        node.attr("href"),
+        node.attr("src"),
+        node.attr("data-src"),
+        node.attr("id"),
+        node.attr("class"),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      const matchesCode =
+        attrs === codeLower ||
+        attrs.includes(`=${codeLower}`) ||
+        attrs.includes(`_${codeLower}_`) ||
+        attrs.includes(`_${codeLower}.`) ||
+        attrs.includes(`-${codeLower}.`) ||
+        attrs.includes(`/${codeLower}/`) ||
+        attrs.includes(`color=${codeLower}`) ||
+        attrs.includes(`colordisplaycode=${codeLower}`) ||
+        attrs.includes(`goods_${codeLower}_`);
+
+      if (!matchesCode) continue;
+      const label = labelFromElement($, el);
+      if (label && !looksLikeColorCode(label.replace(/\s/g, ""))) return label;
+    }
+  }
+
+  // 3. Explicit color-name nodes
+  for (const selector of [
+    '[class*="selectedColor"]',
+    '[class*="color-name"]',
+    '[class*="colorName"]',
+    '[data-testid*="selected-color"]',
+    '[data-testid*="color-name"]',
+    '#selected-color-value',
+    '[class*="product-color"]',
+  ]) {
+    const el = $(selector).get(0);
+    if (!el) continue;
+    const label = labelFromElement($, el);
+    if (label) return label;
+  }
+
+  // 4. Visible labels: "Shown:", "Color:", "Colour:", "Colorway:"
+  const bodyText = $("body").text().replace(/\s+/g, " ");
+  const visiblePatterns = [
+    /Shown\s*[:]\s*([A-Za-z][A-Za-z0-9\s\/,-]{1,70}?)(?:\s*Style\s*:|\s*Size\s*:|$)/i,
+    /Colou?rway\s*[:]\s*([A-Za-z][A-Za-z0-9\s\/,-]{1,70}?)(?:\s*Style\s*:|\s*Size\s*:|$)/i,
+    /Colou?r\s*[:]\s*(?:\d{1,3}\s+)?([A-Za-z][A-Za-z\s\/-]{1,40}?)(?:\s*(?:Style|Size|Qty|Select|Add|Men|Women|Unisex|\||•)|\s*$)/i,
+  ];
+  for (const re of visiblePatterns) {
+    const m = bodyText.match(re);
+    if (m) {
+      const cleaned = cleanColorLabel(m[1]);
+      if (cleaned) return cleaned;
+    }
+  }
+
+  // 5. Embedded product JSON (Nike colorDescription, generic colorName, etc.)
+  const fromJson = extractColorFromEmbeddedJson(html, colorCode);
+  if (fromJson) return fromJson;
+
+  // 6. JSON-LD / microdata / meta
   const jsonLdScripts = $('script[type="application/ld+json"]');
   for (let i = 0; i < jsonLdScripts.length; i++) {
     try {
@@ -146,39 +362,34 @@ function detectColor($: cheerio.CheerioAPI, name: string, url: string): string {
       for (const item of products) {
         if (item["@type"] !== "Product" && item["@type"] !== "IndividualProduct") continue;
         if (item.color && typeof item.color === "string") {
-          return item.color.charAt(0).toUpperCase() + item.color.slice(1).toLowerCase();
+          const cleaned = cleanColorLabel(item.color);
+          if (cleaned) return cleaned;
         }
       }
     } catch { /* skip */ }
   }
 
-  // 3. Meta tags
   const metaColor =
     $('meta[property="product:color"]').attr("content") ||
     $('[itemprop="color"]').attr("content") ||
     $('[itemprop="color"]').text().trim();
-  if (metaColor) return metaColor.charAt(0).toUpperCase() + metaColor.slice(1).toLowerCase();
+  if (metaColor) {
+    const cleaned = cleanColorLabel(metaColor);
+    if (cleaned) return cleaned;
+  }
 
-  // 4. URL color params (if it's a name not a code)
+  // 7. URL param that is already a human color name (not a SKU code)
   try {
     const u = new URL(url);
-    const urlColor = u.searchParams.get("color") || u.searchParams.get("dwvar_color") || "";
-    if (urlColor && urlColor.length > 2 && !/^\d+$/.test(urlColor)) {
-      return urlColor.split(/[-_]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+    for (const [key, value] of u.searchParams) {
+      if (!/color/i.test(key) || !value) continue;
+      if (looksLikeColorCode(value)) continue;
+      const cleaned = cleanColorLabel(value.replace(/[-_]/g, " "));
+      if (cleaned) return cleaned;
     }
   } catch { /* skip */ }
 
-  // 5. "Color: ___" pattern in body text
-  const bodyText = $("body").text();
-  const colorLabelMatch = bodyText.match(/colou?r\s*[:]\s*([A-Za-z][A-Za-z\s-]{1,25})/i);
-  if (colorLabelMatch) {
-    const candidate = colorLabelMatch[1].trim();
-    if (candidate.length < 30) {
-      return candidate.charAt(0).toUpperCase() + candidate.slice(1).toLowerCase();
-    }
-  }
-
-  // 6. Keyword match in title
+  // 8. Keyword fallback from title/description
   const ogDesc = $('meta[property="og:description"]').attr("content") || "";
   return matchColorKeyword(`${name} ${ogDesc}`);
 }
@@ -383,11 +594,18 @@ function resolveUrl(base: string, path: string): string {
 function extractColorCode(url: string): string | null {
   try {
     const u = new URL(url);
-    return (
+    const direct =
       u.searchParams.get("colorDisplayCode") ||
       u.searchParams.get("colorId") ||
-      null
-    );
+      u.searchParams.get("dwvar_color") ||
+      u.searchParams.get("color");
+    if (direct) return direct;
+
+    for (const [key, value] of u.searchParams) {
+      if (/^dwvar_.*_color$/i.test(key) && value) return value;
+      if (/color/i.test(key) && value && looksLikeColorCode(value)) return value;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -449,7 +667,7 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
     "";
 
   const category = detectCategory($, name, url);
-  const color = detectColor($, name, url);
+  const color = detectColor($, name, url, colorCode, html);
 
   const descriptionText =
     $('meta[name="description"]').attr("content") ||
